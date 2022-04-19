@@ -1,1 +1,3 @@
-Let's make QuadRotors!
+目前工程中的内容有：
+1. nrf模块的发送和接收
+2. mpu9250模块
