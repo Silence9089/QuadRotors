@@ -32,6 +32,9 @@
 	extern uint8_t NRF24L01_2_TXDATA[RX_PLOAD_WIDTH];//nrf24l01需要发送的数据
 	extern uint16_t NRF_SSI,NRF_SSI_CNT;//NRF信号强度
 	extern u8 Check_Ch;
+	extern u8 Check_Ch2;
+	extern u8 Check_Ch3;
+	extern u8 Check_Ch4;
 	extern uint8_t NRF_Evnet;
 	
 	uint8_t ANO_NRF_Read_Reg(uint8_t reg);

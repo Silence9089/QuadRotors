@@ -52,12 +52,14 @@ void key_function(void)  //前面两个左右按键的程序
 	{
 		if( count0>=2 && count0<=100 ) //短按 
 		{
-			if(Show.hardware_type==1)
-			{
-				beet_falg=1;
-				Show.windows++;
-				if(Show.windows>2 || Show.set_flag&BIT6) Show.windows=0;
-			}
+			Check_Ch2 = 1 - Check_Ch2;   //对频变量
+			beet_falg=1;
+//			if(Show.hardware_type==1)
+//			{
+//				beet_falg=1;
+//				Show.windows++;
+//				if(Show.windows>2 || Show.set_flag&BIT6) Show.windows=0;
+//			}
 		}
 		count0=0;
 	}
@@ -67,6 +69,7 @@ void key_function(void)  //前面两个左右按键的程序
 		count1++;
 		if(count1==200)//长按2s，摇杆中位校准
 		{
+			Check_Ch3 = 1 - Check_Ch3;   //对频变量
 			ANO_Param.OffSet_En = 1;
 			ANO_LED_0_FLASH();
 		}
@@ -76,6 +79,7 @@ void key_function(void)  //前面两个左右按键的程序
 	{
 		if( count1>=2 && count1<=100 ) //短按 定高变量
 		{
+			Check_Ch4 = 1 - Check_Ch4;   //对频变量
 				Rc.AUX2 ^= (2000^1000);
 			  beet_falg=1;
 		}

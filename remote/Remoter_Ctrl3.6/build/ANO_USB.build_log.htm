@@ -15,9 +15,13 @@ ANO_Remoter\main.c: 1 warning, 0 errors
 compiling ANO_Scheduler.c...
 .\Driver\ANO_Drv_ADC.h(11): warning:  #1-D: last line of file ends without a newline
   #endif /* __ADC_H */ 
+ANO_Remoter\ANO_Scheduler.c(59): warning:  #177-D: function "ANO_Loop_50Hz" was declared but never referenced
+  static void ANO_Loop_50Hz(void)       //20ms执行一�?              ^
+ANO_Remoter\ANO_Scheduler.c(64): warning:  #177-D: function "ANO_Loop_20Hz" was declared but never referenced
+  static void ANO_Loop_20Hz(void)       //50ms执行一�?              ^
 ANO_Remoter\ANO_Scheduler.c(74): warning:  #177-D: function "ANO_Loop_1Hz" was declared but never referenced
   static void ANO_Loop_1Hz(void) // 1000ms执行一�?              ^
-ANO_Remoter\ANO_Scheduler.c: 2 warnings, 0 errors
+ANO_Remoter\ANO_Scheduler.c: 4 warnings, 0 errors
 compiling ANO_Stick.c...
 .\Driver\ANO_Drv_ADC.h(11): warning:  #1-D: last line of file ends without a newline
   #endif /* __ADC_H */ 
@@ -87,7 +91,7 @@ compiling ANO_Drv_Flash.c...
 compiling Key.c...
 .\Driver\ANO_Drv_ADC.h(11): warning:  #1-D: last line of file ends without a newline
   #endif /* __ADC_H */ 
-Driver\Key.c(199): warning:  #1-D: last line of file ends without a newline
+Driver\Key.c(203): warning:  #1-D: last line of file ends without a newline
   }
 Driver\Key.c: 2 warnings, 0 errors
 assembling startup_stm32f10x_md.s...
@@ -114,9 +118,9 @@ compiling usb_istr.c...
 compiling usb_prop.c...
 compiling usb_pwr.c...
 linking...
-Program Size: Code=31984 RO-data=6224 RW-data=448 ZI-data=3368  
+Program Size: Code=32052 RO-data=6220 RW-data=452 ZI-data=3364  
 FromELF: creating hex file...
-".\build\ANO_USB.axf" - 0 Error(s), 22 Warning(s).
+".\build\ANO_USB.axf" - 0 Error(s), 24 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -137,3 +141,5 @@ Package Vendor: ARM
 </pre>
 </body>
 </html>
+USB.axf" 
+Error: Flash Download failed  -  Target DLL has been cancelled

@@ -8,6 +8,9 @@
 	
 u8 data_to_send[33];
 extern u8 Check_Ch;
+extern u8 Check_Ch2;
+extern u8 Check_Ch3;
+extern u8 Check_Ch4;
 int16_t PLANE_YAW,PLANE_ROL,PLANE_PIT;
 
 void ANO_DT_Send_Data(u8 *dataToSend , u8 length)
@@ -42,8 +45,22 @@ void ANO_DT_Send_RCData(void)
 	data_to_send[_cnt++]='0'+((Rc.PIT%100)/10);
 	data_to_send[_cnt++]='0'+(Rc.PIT%10);
 	
-	data_to_send[_cnt++]='0'+1;
-	if(Check_Ch)
+	if(Check_Ch) //右长按
+		data_to_send[_cnt++]='0'+2;
+	else
+		data_to_send[_cnt++]='0'+1;
+	
+	if(Check_Ch2) //右短按
+		data_to_send[_cnt++]='0'+2;
+	else
+		data_to_send[_cnt++]='0'+1;
+	
+	if(Check_Ch3) //左长按
+		data_to_send[_cnt++]='0'+2;
+	else
+		data_to_send[_cnt++]='0'+1;
+	
+	if(Check_Ch4) //左短按
 		data_to_send[_cnt++]='0'+2;
 	else
 		data_to_send[_cnt++]='0'+1;
@@ -78,7 +95,7 @@ void ANO_DT_Send_RCData(void)
 //	
 //	data_to_send[_cnt++]=sum;
 	
-	data_to_send[0]=18;
+	data_to_send[0]=20;
 	//data_to_send[32]=0;
 	
 	ANO_DT_Send_Data(data_to_send, 32);

@@ -116,14 +116,14 @@ void ANO_Loop(void)
 		ANO_Loop_100Hz();
 		S_cnt_10ms = 0;
 	}
-	if(S_cnt_20ms >= 10){		
-		ANO_Loop_50Hz();
-		S_cnt_20ms = 0;
-	}	
-	if(S_cnt_50ms >= 25){		
-		ANO_Loop_20Hz();
-		S_cnt_50ms = 0;
-	}	
+//	if(S_cnt_20ms >= 10){		
+//		ANO_Loop_50Hz();
+//		S_cnt_20ms = 0;
+//	}	
+//	if(S_cnt_50ms >= 25){		
+//		ANO_Loop_20Hz();
+//		S_cnt_50ms = 0;
+//	}	
 	//if(S_cnt_1000ms >= 500){		
 		//ANO_Loop_1Hz();
 		//S_cnt_1000ms = 0;

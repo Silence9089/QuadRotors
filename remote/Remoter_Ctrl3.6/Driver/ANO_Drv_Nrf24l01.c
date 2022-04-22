@@ -156,6 +156,9 @@ void ANO_NRF_TxPacket_AP(uint8_t * tx_buf, uint8_t len)
 }
 
 u8 Check_Ch = 0;
+u8 Check_Ch2 = 0;
+u8 Check_Ch3 = 0;
+u8 Check_Ch4 = 0;
 
 void NRF_Check_Ch(void)  //对频
 {
