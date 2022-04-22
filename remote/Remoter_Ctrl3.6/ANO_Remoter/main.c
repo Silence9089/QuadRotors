@@ -46,7 +46,7 @@ int main(void)
 	
 	SysTick_Config(SystemCoreClock / 500);  //初始化系统滴答定时器,2ms中断
 	
-	ANO_DT_Send_RCData();
+	//ANO_DT_Send_RCData();
 	
 	ANO_LED_0_FLASH();//LED闪烁	 
 	

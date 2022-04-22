@@ -1,11 +1,13 @@
 #include "ANO_DT.h"
+#include "ANO_Drv_Nrf24l01.h"
 
 #define BYTE0(dwTemp)       (*(char *)(&dwTemp))
 #define BYTE1(dwTemp)       (*((char *)(&dwTemp) + 1))
 #define BYTE2(dwTemp)       (*((char *)(&dwTemp) + 2))
 #define BYTE3(dwTemp)       (*((char *)(&dwTemp) + 3))
 	
-u8 data_to_send[50];
+u8 data_to_send[33];
+extern u8 Check_Ch;
 int16_t PLANE_YAW,PLANE_ROL,PLANE_PIT;
 
 void ANO_DT_Send_Data(u8 *dataToSend , u8 length)
@@ -16,44 +18,70 @@ void ANO_DT_Send_Data(u8 *dataToSend , u8 length)
 void ANO_DT_Send_RCData(void)
 {
 	u8 _cnt=0;
-	data_to_send[_cnt++]=0xAA;
-	data_to_send[_cnt++]=0xAF;
-	data_to_send[_cnt++]=0x03;
-	data_to_send[_cnt++]=0;
-	data_to_send[_cnt++]=BYTE1(Rc.THR);
-	data_to_send[_cnt++]=BYTE0(Rc.THR);
-	data_to_send[_cnt++]=BYTE1(Rc.YAW);
-	data_to_send[_cnt++]=BYTE0(Rc.YAW);
-	data_to_send[_cnt++]=BYTE1(Rc.ROL);
-	data_to_send[_cnt++]=BYTE0(Rc.ROL);
-	data_to_send[_cnt++]=BYTE1(Rc.PIT);
-	data_to_send[_cnt++]=BYTE0(Rc.PIT);
+	
+	for(u8 i=_cnt+1;i<32;i++)
+		data_to_send[i]=0;
+//	data_to_send[_cnt++]=0xAA;
+//	data_to_send[_cnt++]=0xAF;
+//	data_to_send[_cnt++]=0x03;
+//	data_to_send[_cnt++]=0;
+	data_to_send[_cnt++]='0'+((Rc.THR%10000)/1000);
+	data_to_send[_cnt++]='0'+((Rc.THR%1000)/100);
+	data_to_send[_cnt++]='0'+((Rc.THR%100)/10);
+	data_to_send[_cnt++]='0'+(Rc.THR%10);
+	data_to_send[_cnt++]='0'+((Rc.YAW%10000)/1000);
+	data_to_send[_cnt++]='0'+((Rc.YAW%1000)/100);
+	data_to_send[_cnt++]='0'+((Rc.YAW%100)/10);
+	data_to_send[_cnt++]='0'+(Rc.YAW%10);
+	data_to_send[_cnt++]='0'+((Rc.ROL%10000)/1000);
+	data_to_send[_cnt++]='0'+((Rc.ROL%1000)/100);
+	data_to_send[_cnt++]='0'+((Rc.ROL%100)/10);
+	data_to_send[_cnt++]='0'+(Rc.ROL%10);
+	data_to_send[_cnt++]='0'+((Rc.PIT%10000)/1000);
+	data_to_send[_cnt++]='0'+((Rc.PIT%1000)/100);
+	data_to_send[_cnt++]='0'+((Rc.PIT%100)/10);
+	data_to_send[_cnt++]='0'+(Rc.PIT%10);
+	
+	data_to_send[_cnt++]='0'+1;
+	if(Check_Ch)
+		data_to_send[_cnt++]='0'+2;
+	else
+		data_to_send[_cnt++]='0'+1;
+	
+//	data_to_send[_cnt++]=BYTE1(Rc.YAW);
+//	data_to_send[_cnt++]=BYTE0(Rc.YAW);
+//	data_to_send[_cnt++]=BYTE1(Rc.YAW);
+//	data_to_send[_cnt++]=BYTE0(Rc.YAW);
+//	data_to_send[_cnt++]=BYTE1(Rc.ROL);
+//	data_to_send[_cnt++]=BYTE0(Rc.ROL);
+//	data_to_send[_cnt++]=BYTE1(Rc.PIT);
+//	data_to_send[_cnt++]=BYTE0(Rc.PIT);
 
-	data_to_send[_cnt++]=BYTE1(Rc.AUX1);
-	data_to_send[_cnt++]=BYTE0(Rc.AUX1);
-	data_to_send[_cnt++]=BYTE1(Rc.AUX2);
-	data_to_send[_cnt++]=BYTE0(Rc.AUX2);
-	data_to_send[_cnt++]=BYTE1(Rc.AUX3);
-	data_to_send[_cnt++]=BYTE0(Rc.AUX3);
-	data_to_send[_cnt++]=BYTE1(Rc.AUX4);
-	data_to_send[_cnt++]=BYTE0(Rc.AUX4);
-	data_to_send[_cnt++]=BYTE1(Rc.AUX5);
-	data_to_send[_cnt++]=BYTE0(Rc.AUX5);
-	data_to_send[_cnt++]=BYTE1(Rc.AUX6);
-	data_to_send[_cnt++]=BYTE0(Rc.AUX6);
+//	data_to_send[_cnt++]=BYTE1(Rc.AUX1);
+//	data_to_send[_cnt++]=BYTE0(Rc.AUX1);
+//	data_to_send[_cnt++]=BYTE1(Rc.AUX2);
+//	data_to_send[_cnt++]=BYTE0(Rc.AUX2);
+//	data_to_send[_cnt++]=BYTE1(Rc.AUX3);
+//	data_to_send[_cnt++]=BYTE0(Rc.AUX3);
+//	data_to_send[_cnt++]=BYTE1(Rc.AUX4);
+//	data_to_send[_cnt++]=BYTE0(Rc.AUX4);
+//	data_to_send[_cnt++]=BYTE1(Rc.AUX5);
+//	data_to_send[_cnt++]=BYTE0(Rc.AUX5);
+//	data_to_send[_cnt++]=BYTE1(Rc.AUX6);
+//	data_to_send[_cnt++]=BYTE0(Rc.AUX6);
+//	
+//	data_to_send[3] = _cnt-4;
+//	
+//	u8 sum = 0;
+//	for(u8 i=0;i<_cnt;i++)
+//		sum += data_to_send[i];
+//	
+//	data_to_send[_cnt++]=sum;
 	
-	data_to_send[3] = _cnt-4;
+	data_to_send[0]=18;
+	//data_to_send[32]=0;
 	
-	u8 sum = 0;
-	for(u8 i=0;i<_cnt;i++)
-		sum += data_to_send[i];
-	
-	data_to_send[_cnt++]=sum;
-	
-	data_to_send[0]=20;
-	data_to_send[32]=0;
-	
-	ANO_DT_Send_Data(data_to_send, _cnt);
+	ANO_DT_Send_Data(data_to_send, 32);
 }
 
 void ANO_DT_Send_RCData_To_Pc(void)

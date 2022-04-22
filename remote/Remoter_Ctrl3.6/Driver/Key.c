@@ -43,7 +43,7 @@ void key_function(void)  //前面两个左右按键的程序
 		count0++;
 		if(count0==200)   //长按2s遥控器搜索飞机 对频
 		{
-			Check_Ch = 1;   //对频变量
+			Check_Ch = 1 - Check_Ch;   //对频变量
 			ANO_LED_0_FLASH();		//led闪烁
 		}
 		if(count0>=250)	count0=250;

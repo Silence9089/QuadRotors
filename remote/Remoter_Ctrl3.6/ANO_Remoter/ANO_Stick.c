@@ -128,7 +128,7 @@ void Mid_Offset(struct _Rc *rc)
 void ANO_Stick_Scan(void)
 {
 #ifdef American_Mode                                                               //跑这里的程序
-	Rc.THR = 1000 + (uint16_t)(0.25f*ADC_ConvertedValue[1]) - ANO_Param.OffSet_Thr;  //方向前后
+	Rc.THR = 2000 - (uint16_t)(0.25f*ADC_ConvertedValue[1]) - ANO_Param.OffSet_Thr;  //方向前后
 	Rc.PIT = 1000 + (uint16_t)(0.25f*ADC_ConvertedValue[3]) - ANO_Param.OffSet_Pit;  //油门
 #else																																							 //这里不工作
 	Rc.PIT = 1000 + (uint16_t)(0.25f*ADC_ConvertedValue[3]) - ANO_Param.OffSet_Pit;
