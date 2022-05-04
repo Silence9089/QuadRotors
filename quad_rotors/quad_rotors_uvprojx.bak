@@ -52,7 +52,7 @@
           <OutputName>quad_rotors</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>0</CreateHexFile>
+          <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\Listings\</ListingPath>
@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\Start;.\User;.\Libraries;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM3;.\nRF24l01;.\Serial;.\mpu9250</IncludePath>
+              <IncludePath>.\Start;.\User;.\Libraries;.\FreeRTOS\include;.\FreeRTOS\portable\RVDS\ARM_CM3;.\nRF24l01;.\Serial;.\mpu9250;.\control</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -804,6 +804,31 @@
               <FileName>FreeRTOSConfig.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\User\FreeRTOSConfig.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>control</GroupName>
+          <Files>
+            <File>
+              <FileName>pwm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\control\pwm.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\control\motor.c</FilePath>
+            </File>
+            <File>
+              <FileName>Led.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\control\Led.c</FilePath>
+            </File>
+            <File>
+              <FileName>Led.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\control\Led.h</FilePath>
             </File>
           </Files>
         </Group>

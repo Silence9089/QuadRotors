@@ -1,475 +1,120 @@
-#include "stm32f10x.h"
 #include "mpu9250.h"
+#include "stm32_iic.h"
 #include "delay.h"
-#include  <math.h>    //Keil library 
-#include <stdbool.h>
 
-//hxh自己添加的
-//*******************************
-#define   FALSE	0
-#define   TRUE	1
-#define WWDG_IRQChannel	((u8)0x00)
-
-static short accel[3];
-static short gyro[3];
-static short mag[3];
-
-//*******************************
-
-GPIO_InitTypeDef GPIO_InitStructure;
-ErrorStatus HSEStartUpStatus;
-
-#define   uchar unsigned char
-#define   uint unsigned int	
-
-
-// 定义MPU9250内部地址
-//****************************************
-#define	SMPLRT_DIV		0x19	//陀螺仪采样率，典型值：0x07(125Hz)
-#define	CONFIG			0x1A	//低通滤波频率，典型值：0x06(5Hz)
-#define	GYRO_CONFIG		0x1B	//陀螺仪自检及测量范围，典型值：0x18(不自检，2000deg/s)
-#define	ACCEL_CONFIG	0x1C	//加速计自检、测量范围及高通滤波频率，典型值：0x01(不自检，2G，5Hz)
-
-#define	ACCEL_XOUT_H	0x3B
-#define	ACCEL_XOUT_L	0x3C
-#define	ACCEL_YOUT_H	0x3D
-#define	ACCEL_YOUT_L	0x3E
-#define	ACCEL_ZOUT_H	0x3F
-#define	ACCEL_ZOUT_L	0x40
-
-#define	TEMP_OUT_H		0x41
-#define	TEMP_OUT_L		0x42
-
-#define	GYRO_XOUT_H		0x43
-#define	GYRO_XOUT_L		0x44	
-#define	GYRO_YOUT_H		0x45
-#define	GYRO_YOUT_L		0x46
-#define	GYRO_ZOUT_H		0x47
-#define	GYRO_ZOUT_L		0x48
-
-		
-#define MAG_XOUT_L		0x03
-#define MAG_XOUT_H		0x04
-#define MAG_YOUT_L		0x05
-#define MAG_YOUT_H		0x06
-#define MAG_ZOUT_L		0x07
-#define MAG_ZOUT_H		0x08
-
-
-#define	PWR_MGMT_1		0x6B	//电源管理，典型值：0x00(正常启用)
-#define	WHO_AM_I		  0x75	//IIC地址寄存器(默认数值0x68，只读)
-
-
-//****************************
-
-#define	GYRO_ADDRESS   0xD0	  //陀螺地址
-#define MAG_ADDRESS    0x18   //磁场地址
-#define ACCEL_ADDRESS  0xD0 
-
-unsigned char TX_DATA[4];  	 //显示据缓存区
+int16_t Direction;
+float Pitch,Roll,Yaw;
 unsigned char BUF[10];       //接收数据缓存区
-char  test=0; 				 //IIC用到
-short T_X,T_Y,T_Z,T_T;		 //X,Y,Z轴，温度
-
-//************************************
-/*模拟IIC端口输出输入定义*/
-#define SCL_H         GPIOB->BSRR = GPIO_Pin_6
-#define SCL_L         GPIOB->BRR  = GPIO_Pin_6 
-   
-#define SDA_H         GPIOB->BSRR = GPIO_Pin_7
-#define SDA_L         GPIOB->BRR  = GPIO_Pin_7
-
-#define SCL_read      GPIOB->IDR  & GPIO_Pin_6
-#define SDA_read      GPIOB->IDR  & GPIO_Pin_7
-
-/* 函数申明 -----------------------------------------------*/
-//void RCC_Configuration(void);
-//void GPIO_Configuration(void);
-//void NVIC_Configuration(void);
-//void USART1_Configuration(void);
-//void WWDG_Configuration(void);
-//void Delay(u32 nTime);
-//void Delayms(vu32 m);  
-/* 变量定义 ----------------------------------------------*/
-
-  /*******************************/
-void DATA_printf(uchar *s,short temp_data)
-{
-	if(temp_data<0){
-	temp_data=-temp_data;
-    *s='-';
-	}
-	else *s=' ';
-    *++s =temp_data/100+0x30;
-    temp_data=temp_data%100;     //取余运算
-    *++s =temp_data/10+0x30;
-    temp_data=temp_data%10;      //取余运算
-    *++s =temp_data+0x30; 	
-}
-
-/*******************************************************************************
-* Function Name  : I2C_GPIO_Config
-* Description    : Configration Simulation IIC GPIO
-* Input          : None 
-* Output         : None
-* Return         : None
-****************************************************************************** */
-void I2C_GPIO_Config(void)
-{
-  GPIO_InitTypeDef  GPIO_InitStructure; 
+short T_X,T_Y,T_Z;		 //X,Y,Z轴，温度
  
-  GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_6;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;  
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
+//声明相关变量
+unsigned long sensor_timestamp;
+short gyro[3], accel[3], sensors;
+unsigned char more;
+long quat[4];
+//误差纠正
+#define  Pitch_error  1.0
+#define  Roll_error   -2.0
+#define  Yaw_error    0.0
 
-  GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_7;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+static struct hal_s hal = {0};
+volatile unsigned char rx_new;
+float q0=1.0f,q1=0.0f,q2=0.0f,q3=0.0f;
+static signed char gyro_orientation[9] = {-1, 0, 0,
+                                           0,-1, 0,
+                                           0, 0, 1};
+
+																					 
+																					 
+																					 
+
+/* These next two functions converts the orientation matrix (see
+ * gyro_orientation) to a scalar representation for use by the DMP.
+ * NOTE: These functions are borrowed from Invensense's MPL.
+ */
+static  unsigned short inv_row_2_scale(const signed char *row)
+{
+    unsigned short b;
+
+    if (row[0] > 0)
+        b = 0;
+    else if (row[0] < 0)
+        b = 4;
+    else if (row[1] > 0)
+        b = 1;
+    else if (row[1] < 0)
+        b = 5;
+    else if (row[2] > 0)
+        b = 2;
+    else if (row[2] < 0)
+        b = 6;
+    else
+        b = 7;      // error
+    return b;
 }
 
-/*******************************************************************************
-* Function Name  : I2C_delay
-* Description    : Simulation IIC Timing series delay
-* Input          : None
-* Output         : None
-* Return         : None
-****************************************************************************** */
-void I2C_delay(void)
+
+
+static  unsigned short inv_orientation_matrix_to_scalar(const signed char *mtx)
 {
-		
-   u8 i=30; //这里可以优化速度	，经测试最低到5还能写入
-   while(i) 
-   { 
-     i--; 
-   }  
+    unsigned short scalar;
+
+    /*
+       XYZ  010_001_000 Identity Matrix
+       XZY  001_010_000
+       YXZ  010_000_001
+       YZX  000_010_001
+       ZXY  001_000_010
+       ZYX  000_001_010
+     */
+
+    scalar = inv_row_2_scale(mtx);
+    scalar |= inv_row_2_scale(mtx + 3) << 3;
+    scalar |= inv_row_2_scale(mtx + 6) << 6;
+
+
+    return scalar;
 }
 
-void delay5ms(void)
+
+
+ /*自检函数*/
+static void run_self_test(void)
 {
-		
-   int i=5000;  
-   while(i) 
-   { 
-     i--; 
-   }  
-}
-/*******************************************************************************
-* Function Name  : I2C_Start
-* Description    : Master Start Simulation IIC Communication
-* Input          : None
-* Output         : None
-* Return         : Wheather	 Start
-****************************************************************************** */
-bool I2C_Start(void)
-{
-	SDA_H;
-	SCL_H;
-	I2C_delay();
-	if(!SDA_read)return FALSE;	//SDA线为低电平则总线忙,退出
-	SDA_L;
-	I2C_delay();
-	if(SDA_read) return FALSE;	//SDA线为高电平则总线出错,退出
-	SDA_L;
-	I2C_delay();
-	return TRUE;
-}
-/*******************************************************************************
-* Function Name  : I2C_Stop
-* Description    : Master Stop Simulation IIC Communication
-* Input          : None
-* Output         : None
-* Return         : None
-****************************************************************************** */
-void I2C_Stop(void)
-{
-	SCL_L;
-	I2C_delay();
-	SDA_L;
-	I2C_delay();
-	SCL_H;
-	I2C_delay();
-	SDA_H;
-	I2C_delay();
-} 
-/*******************************************************************************
-* Function Name  : I2C_Ack
-* Description    : Master Send Acknowledge Single
-* Input          : None
-* Output         : None
-* Return         : None
-****************************************************************************** */
-void I2C_Ack(void)
-{	
-	SCL_L;
-	I2C_delay();
-	SDA_L;
-	I2C_delay();
-	SCL_H;
-	I2C_delay();
-	SCL_L;
-	I2C_delay();
-}   
-/*******************************************************************************
-* Function Name  : I2C_NoAck
-* Description    : Master Send No Acknowledge Single
-* Input          : None
-* Output         : None
-* Return         : None
-****************************************************************************** */
-void I2C_NoAck(void)
-{	
-	SCL_L;
-	I2C_delay();
-	SDA_H;
-	I2C_delay();
-	SCL_H;
-	I2C_delay();
-	SCL_L;
-	I2C_delay();
-} 
-/*******************************************************************************
-* Function Name  : I2C_WaitAck
-* Description    : Master Reserive Slave Acknowledge Single
-* Input          : None
-* Output         : None
-* Return         : Wheather	 Reserive Slave Acknowledge Single
-****************************************************************************** */
-bool I2C_WaitAck(void) 	 //返回为:=1有ACK,=0无ACK
-{
-	SCL_L;
-	I2C_delay();
-	SDA_H;			
-	I2C_delay();
-	SCL_H;
-	I2C_delay();
-	if(SDA_read)
+    int result;
+
+    long gyro[3], accel[3];
+
+    result = mpu_run_self_test(gyro, accel);
+    if (result == 0x7) 
+    {
+        /* Test passed. We can trust the gyro data here, so let's push it down
+         * to the DMP.
+         */
+        float sens;
+        unsigned short accel_sens;
+        mpu_get_gyro_sens(&sens);
+        gyro[0] = (long)(gyro[0] * sens);
+        gyro[1] = (long)(gyro[1] * sens);
+        gyro[2] = (long)(gyro[2] * sens);
+        dmp_set_gyro_bias(gyro);
+        mpu_get_accel_sens(&accel_sens);
+        accel[0] *= accel_sens;
+        accel[1] *= accel_sens;
+        accel[2] *= accel_sens;
+        dmp_set_accel_bias(accel);
+	//	printf("setting bias succesfully ......\n");
+    }
+	else
 	{
-      SCL_L;
-	  I2C_delay();
-      return FALSE;
+	//	printf("bias has not been modified ......\n");
 	}
-	SCL_L;
-	I2C_delay();
-	return TRUE;
+    
 }
-/*******************************************************************************
-* Function Name  : I2C_SendByte
-* Description    : Master Send a Byte to Slave
-* Input          : Will Send Date
-* Output         : None
-* Return         : None
-****************************************************************************** */
-void I2C_SendByte(u8 SendByte) //数据从高位到低位//
-{
-    u8 i=8;
-    while(i--)
-    {
-        SCL_L;
-        I2C_delay();
-      if(SendByte&0x80)
-        SDA_H;  
-      else 
-        SDA_L;   
-        SendByte<<=1;
-        I2C_delay();
-		SCL_H;
-        I2C_delay();
-    }
-    SCL_L;
-}  
-/*******************************************************************************
-* Function Name  : I2C_RadeByte
-* Description    : Master Reserive a Byte From Slave
-* Input          : None
-* Output         : None
-* Return         : Date From Slave 
-****************************************************************************** */
-unsigned char I2C_RadeByte(void)  //数据从高位到低位//
-{ 
-    u8 i=8;
-    u8 ReceiveByte=0;
-
-    SDA_H;				
-    while(i--)
-    {
-      ReceiveByte<<=1;      
-      SCL_L;
-      I2C_delay();
-	  SCL_H;
-      I2C_delay();	
-      if(SDA_read)
-      {
-        ReceiveByte|=0x01;
-      }
-    }
-    SCL_L;
-    return ReceiveByte;
-} 
-//ZRX          
-//单字节写入*******************************************
-
-bool Single_Write(unsigned char SlaveAddress,unsigned char REG_Address,unsigned char REG_data)		     //void
-{
-  	if(!I2C_Start())return FALSE;
-    I2C_SendByte(SlaveAddress);   //发送设备地址+写信号//I2C_SendByte(((REG_Address & 0x0700) >>7) | SlaveAddress & 0xFFFE);//设置高起始地址+器件地址 
-    if(!I2C_WaitAck()){I2C_Stop(); return FALSE;}
-    I2C_SendByte(REG_Address );   //设置低起始地址      
-    I2C_WaitAck();	
-    I2C_SendByte(REG_data);
-    I2C_WaitAck();   
-    I2C_Stop(); 
-    delay5ms();
-    return TRUE;
-}
-
-//单字节读取*****************************************
-unsigned char Single_Read(unsigned char SlaveAddress,unsigned char REG_Address)
-{   unsigned char REG_data;     	
-	if(!I2C_Start())return FALSE;
-    I2C_SendByte(SlaveAddress); //I2C_SendByte(((REG_Address & 0x0700) >>7) | REG_Address & 0xFFFE);//设置高起始地址+器件地址 
-    if(!I2C_WaitAck()){I2C_Stop();test=1; return FALSE;}
-    I2C_SendByte((u8) REG_Address);   //设置低起始地址      
-    I2C_WaitAck();
-    I2C_Start();
-    I2C_SendByte(SlaveAddress+1);
-    I2C_WaitAck();
-
-	REG_data= I2C_RadeByte();
-    I2C_NoAck();
-    I2C_Stop();
-    //return TRUE;
-	return REG_data;
-
-}						      
-
-/*
-********************************************************************************
-** 函数名称 ： RCC_Configuration(void)
-** 函数功能 ： 时钟初始化
-** 输    入	： 无
-** 输    出	： 无
-** 返    回	： 无
-********************************************************************************
-*/
-void RCC_Configuration(void)
-{   
-  /* RCC system reset(for debug purpose) */
-  RCC_DeInit();
-
-  /* Enable HSE */
-  RCC_HSEConfig(RCC_HSE_ON);
-
-  /* Wait till HSE is ready */
-  HSEStartUpStatus = RCC_WaitForHSEStartUp();
-
-  if(HSEStartUpStatus == SUCCESS)
-  {
-    /* HCLK = SYSCLK */
-    RCC_HCLKConfig(RCC_SYSCLK_Div1); 
-  
-    /* PCLK2 = HCLK */
-    RCC_PCLK2Config(RCC_HCLK_Div1); 
-
-    /* PCLK1 = HCLK/2 */
-    RCC_PCLK1Config(RCC_HCLK_Div2);
-
-    /* Flash 2 wait state */
-    FLASH_SetLatency(FLASH_Latency_2);
-    /* Enable Prefetch Buffer */
-    FLASH_PrefetchBufferCmd(FLASH_PrefetchBuffer_Enable);
-
-    /* PLLCLK = 8MHz * 9 = 72 MHz */
-    RCC_PLLConfig(RCC_PLLSource_HSE_Div1, RCC_PLLMul_9);
-
-    /* Enable PLL */ 
-    RCC_PLLCmd(ENABLE);
-
-    /* Wait till PLL is ready */
-    while(RCC_GetFlagStatus(RCC_FLAG_PLLRDY) == RESET)
-    {
-    }
-
-    /* Select PLL as system clock source */
-    RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
-
-    /* Wait till PLL is used as system clock source */
-    while(RCC_GetSYSCLKSource() != 0x08)
-    {
-    }
-  } 
-   /* Enable GPIOA, GPIOB, GPIOC, GPIOD, GPIOE, GPIOF, GPIOG and AFIO clocks */
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB , ENABLE);
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD , ENABLE);
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOE | RCC_APB2Periph_GPIOF , ENABLE);
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOG | RCC_APB2Periph_AFIO  , ENABLE);  
-}
-
-
-/*
-********************************************************************************
-** 函数名称 ： NVIC_Configuration(void)
-** 函数功能 ： 中断初始化
-** 输    入	： 无
-** 输    出	： 无
-** 返    回	： 无
-********************************************************************************
-*/
-void NVIC_Configuration(void)
-{ 
-  NVIC_InitTypeDef NVIC_InitStructure;  
-  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_0); 
  
-  NVIC_InitStructure.NVIC_IRQChannel = WWDG_IRQChannel;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-  NVIC_Init(&NVIC_InitStructure);
 
-}
-
- /*
-********************************************************************************
-** 函数名称 ： WWDG_Configuration(void)
-** 函数功能 ： 看门狗初始化
-** 输    入	： 无
-** 输    出	： 无
-** 返    回	： 无
-********************************************************************************
-*/
-void WWDG_Configuration(void)
-{
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_WWDG, ENABLE);	
-  WWDG_SetPrescaler(WWDG_Prescaler_8);	              //  WWDG clock counter = (PCLK1/4096)/8 = 244 Hz (~4 ms)  
-  WWDG_SetWindowValue(0x41);		                 // Set Window value to 0x41
-  WWDG_Enable(0x50);		       // Enable WWDG and set counter value to 0x7F, WWDG timeout = ~4 ms * 64 = 262 ms 
-  WWDG_ClearFlag();			       // Clear EWI flag
-  WWDG_EnableIT();			       // Enable EW interrupt
-}
-
-/*
-********************************************************************************
-** 函数名称 ： Delay(vu32 nCount)
-** 函数功能 ： 延时函数
-** 输    入	： 无
-** 输    出	： 无
-** 返    回	： 无
-********************************************************************************
-*/
- void Delay(vu32 nCount)
-{
-  for(; nCount != 0; nCount--);
-}
-
-/*
-********************************************************************************
-** 函数名称 ： void Delayms(vu32 m)
-** 函数功能 ： 长延时函数	 m=1,延时1ms
-** 输    入	： 无
-** 输    出	： 无
-** 返    回	： 无
-********************************************************************************
-*/
- void Delayms(vu32 m)
+void Delayms(vu32 m)
 {
   u32 i;
   
@@ -477,173 +122,165 @@ void WWDG_Configuration(void)
        for (i=0; i<50000; i++);
 }
 
-/*
-********************************************************************************
-** 函数名称 ： WWDG_IRQHandler(void)
-** 函数功能 ： 窗口提前唤醒中断
-** 输    入	： 无
-** 输    出	： 无
-** 返    回	： 无
-********************************************************************************
-*/ 
-
-void WWDG_IRQHandler(void)
+void Mpu_Init(u8 mode)
 {
-  /* Update WWDG counter */
-  WWDG_SetCounter(0x50);
-	
-  /* Clear EWI flag */
-  WWDG_ClearFlag(); 
+		u8 result = mpu_init();
+		i2cWrite(GYRO_ADDRESS,0x37,0x02);//turn on Bypass Mode 
+		Delayms(10);
+    if(!result)   //返回0代表初始化成功
+    {   
+        //printf("mpu initialization complete......\n ");
+        
+        //mpu_set_sensor
+        if(!mpu_set_sensors(INV_XYZ_GYRO | INV_XYZ_ACCEL))
+        {
+            //printf("mpu_set_sensor complete ......\n");
+        }
+        else
+        {
+            //printf("mpu_set_sensor come across error ......\n");
+        }
+        
+        //mpu_configure_fifo
+        if(!mpu_configure_fifo(INV_XYZ_GYRO | INV_XYZ_ACCEL))
+        {
+            //printf("mpu_configure_fifo complete ......\n");
+        }
+        else
+        {
+            //printf("mpu_configure_fifo come across error ......\n");
+        }
+        
+        //mpu_set_sample_rate
+        if(!mpu_set_sample_rate(DEFAULT_MPU_HZ))
+        {
+            //printf("mpu_set_sample_rate complete ......\n");
+        }
+        else
+        {
+            //printf("mpu_set_sample_rate error ......\n");
+        }
+        
+        //dmp_load_motion_driver_firmvare
+        if(!dmp_load_motion_driver_firmware())
+        {
+            //printf("dmp_load_motion_driver_firmware complete ......\n");
+        }
+        else
+        {
+            //printf("dmp_load_motion_driver_firmware come across error ......\n");
+        }
+        
+        //dmp_set_orientation
+        if(!dmp_set_orientation(inv_orientation_matrix_to_scalar(gyro_orientation)))
+        {
+            //printf("dmp_set_orientation complete ......\n");
+        }
+        else
+        {
+            //printf("dmp_set_orientation come across error ......\n");
+        }
+        
+        //dmp_enable_feature
+        if(!dmp_enable_feature(DMP_FEATURE_6X_LP_QUAT | DMP_FEATURE_TAP |
+            DMP_FEATURE_ANDROID_ORIENT | DMP_FEATURE_SEND_RAW_ACCEL | DMP_FEATURE_SEND_CAL_GYRO |
+            DMP_FEATURE_GYRO_CAL))
+        {
+            //printf("dmp_enable_feature complete ......\n");
+        }
+        else
+        {
+            //printf("dmp_enable_feature come across error ......\n");
+        }
+        
+        //dmp_set_fifo_rate
+        if(!dmp_set_fifo_rate(DEFAULT_MPU_HZ))
+        {
+           //printf("dmp_set_fifo_rate complete ......\n");
+        }
+        else
+        {
+            //printf("dmp_set_fifo_rate come across error ......\n");
+        }
+        
+        //不开自检，以水平作为零度
+        //开启自检以当前位置作为零度
+				if(mode==1)
+					run_self_test();
+        
+        if(!mpu_set_dmp_state(1))
+        {
+            //printf("mpu_set_dmp_state complete ......\n");
+        }
+        else
+        {
+            //printf("mpu_set_dmp_state come across error ......\n");
+        }
+        
+    }
 }
 
-
-//初始化MPU9250，根据需要请参考pdf进行修改************************
-void Init_MPU9250(void)
+u8 Update_attitude_Angle(void)
 {
-/*
-   Single_Write(GYRO_ADDRESS,PWR_M, 0x80);   //
-   Single_Write(GYRO_ADDRESS,SMPL, 0x07);    //
-   Single_Write(GYRO_ADDRESS,DLPF, 0x1E);    //±2000°
-   Single_Write(GYRO_ADDRESS,INT_C, 0x00 );  //
-   Single_Write(GYRO_ADDRESS,PWR_M, 0x00);   //
-*/
-  Single_Write(GYRO_ADDRESS,PWR_MGMT_1, 0x00);	//解除休眠状态
-	Single_Write(GYRO_ADDRESS,SMPLRT_DIV, 0x07);
-	Single_Write(GYRO_ADDRESS,CONFIG, 0x06);
-	Single_Write(GYRO_ADDRESS,GYRO_CONFIG, 0x18);
-	Single_Write(GYRO_ADDRESS,ACCEL_CONFIG, 0x01);
-  //----------------
-//	Single_Write(GYRO_ADDRESS,0x6A,0x00);//close Master Mode	
+	//float Yaw,Roll,Pitch;
+        dmp_read_fifo(gyro, accel, quat, &sensor_timestamp, &sensors, &more);	 
+        /* Gyro and accel data are written to the FIFO by the DMP in chip
+        * frame and hardware units. This behavior is convenient because it
+        * keeps the gyro and accel outputs of dmp_read_fifo and
+        * mpu_read_fifo consistent.
+        */
+        /*     if (sensors & INV_XYZ_GYRO )
+        send_packet(PACKET_TYPE_GYRO, gyro);
+        if (sensors & INV_XYZ_ACCEL)
+        send_packet(PACKET_TYPE_ACCEL, accel); */
+        /* Unlike gyro and accel, quaternions are written to the FIFO in
+        * the body frame, q30. The orientation is set by the scalar passed
+        * to dmp_set_orientation during initialization.
+        */
+				/*四元数解姿态*/
+        if (sensors & INV_WXYZ_QUAT )
+        {
+            q0 = quat[0] / q30;
+            q1 = quat[1] / q30;
+            q2 = quat[2] / q30;
+            q3 = quat[3] / q30;
+            
+            Pitch  = asin(-2 * q1 * q3 + 2 * q0* q2)* 57.3 + Pitch_error; // pitch
+            Roll = atan2(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2* q2 + 1)* 57.3 + Roll_error; // roll
+            Yaw = atan2(2*(q1*q2 + q0*q3),q0*q0+q1*q1-q2*q2-q3*q3) * 57.3 + Yaw_error;
+						return 0;
+        }
+				return 1;
 
 }
-	
-//******读取MPU9250数据****************************************
-void READ_MPU9250_ACCEL(void)
-{ 
-
-   BUF[0]=Single_Read(ACCEL_ADDRESS,ACCEL_XOUT_L); 
-   BUF[1]=Single_Read(ACCEL_ADDRESS,ACCEL_XOUT_H);
-   T_X=	(BUF[1]<<8)|BUF[0];
-   T_X/=164; 						   //读取计算X轴数据
-
-   BUF[2]=Single_Read(ACCEL_ADDRESS,ACCEL_YOUT_L);
-   BUF[3]=Single_Read(ACCEL_ADDRESS,ACCEL_YOUT_H);
-   T_Y=	(BUF[3]<<8)|BUF[2];
-   T_Y/=164; 						   //读取计算Y轴数据
-   BUF[4]=Single_Read(ACCEL_ADDRESS,ACCEL_ZOUT_L);
-   BUF[5]=Single_Read(ACCEL_ADDRESS,ACCEL_ZOUT_H);
-   T_Z=	(BUF[5]<<8)|BUF[4];
-   T_Z/=164; 					       //读取计算Z轴数据
- 
-}
-
-void READ_MPU9250_GYRO(void)
-{ 
-
-   BUF[0]=Single_Read(GYRO_ADDRESS,GYRO_XOUT_L); 
-   BUF[1]=Single_Read(GYRO_ADDRESS,GYRO_XOUT_H);
-   T_X=	(BUF[1]<<8)|BUF[0];
-   T_X/=16.4; 						   //读取计算X轴数据
-
-   BUF[2]=Single_Read(GYRO_ADDRESS,GYRO_YOUT_L);
-   BUF[3]=Single_Read(GYRO_ADDRESS,GYRO_YOUT_H);
-   T_Y=	(BUF[3]<<8)|BUF[2];
-   T_Y/=16.4; 						   //读取计算Y轴数据
-   BUF[4]=Single_Read(GYRO_ADDRESS,GYRO_ZOUT_L);
-   BUF[5]=Single_Read(GYRO_ADDRESS,GYRO_ZOUT_H);
-   T_Z=	(BUF[5]<<8)|BUF[4];
-   T_Z/=16.4; 					       //读取计算Z轴数据
- 
- 
-  // BUF[6]=Single_Read(GYRO_ADDRESS,TEMP_OUT_L); 
-  // BUF[7]=Single_Read(GYRO_ADDRESS,TEMP_OUT_H); 
-  // T_T=(BUF[7]<<8)|BUF[6];
-  // T_T = 35+ ((double) (T_T + 13200)) / 280;// 读取计算出温度
-}
-
-
-void READ_MPU9250_MAG(void)
-{ 
-   Single_Write(GYRO_ADDRESS,0x37,0x02);//turn on Bypass Mode 
+void Update_Magnetometer(void)
+{
+//		 i2cWrite(GYRO_ADDRESS,PWR_MGMT_1, 0x00);	//解除休眠状态
+//	i2cWrite(GYRO_ADDRESS,SMPLRT_DIV, 0x07);
+//	i2cWrite(GYRO_ADDRESS,CONFIG, 0x06);
+//	i2cWrite(GYRO_ADDRESS,GYRO_CONFIG, 0x18);
+//	i2cWrite(GYRO_ADDRESS,ACCEL_CONFIG, 0x01);
+   
+   i2cWrite(MAG_ADDRESS,0x0A,0x01);
    Delayms(10);	
-   Single_Write(MAG_ADDRESS,0x0A,0x01);
-   Delayms(10);	
-   BUF[0]=Single_Read (MAG_ADDRESS,MAG_XOUT_L);
-   BUF[1]=Single_Read (MAG_ADDRESS,MAG_XOUT_H);
+   i2cRead (MAG_ADDRESS,MAG_XOUT_L,1,BUF);
+   i2cRead (MAG_ADDRESS,MAG_XOUT_H,1,BUF+1);
    T_X=(BUF[1]<<8)|BUF[0];
 
-   BUF[2]=Single_Read(MAG_ADDRESS,MAG_YOUT_L);
-   BUF[3]=Single_Read(MAG_ADDRESS,MAG_YOUT_H);
+   i2cRead(MAG_ADDRESS,MAG_YOUT_L,1,BUF+2);
+   i2cRead(MAG_ADDRESS,MAG_YOUT_H,1,BUF+3);
    T_Y=	(BUF[3]<<8)|BUF[2];
    						   //读取计算Y轴数据
 	 
-   BUF[4]=Single_Read(MAG_ADDRESS,MAG_ZOUT_L);
-   BUF[5]=Single_Read(MAG_ADDRESS,MAG_ZOUT_H);
+   i2cread(MAG_ADDRESS,MAG_ZOUT_L,1,BUF+4);
+   i2cread(MAG_ADDRESS,MAG_ZOUT_H,1,BUF+5);
    T_Z=	(BUF[5]<<8)|BUF[4];
  					       //读取计算Z轴数据
+
+	 Direction=	atan2( 
+									(double) (   (int16_t)   (T_X +0)   ),
+									(double) (   (int16_t)   (T_Y -0)  )
+								)*(180/3.14159265)+180;
+
 }
 
-
-void Mpu9250_Init(void)
-{ 
-  RCC_Configuration();		 //配置RCC
-  I2C_GPIO_Config();		 //配置IIC使用端口
-  Delayms(10);				 //延时
-  Init_MPU9250();		     //初始化MPU9250
-}
-
-short* Accel(void)
-{
-	READ_MPU9250_ACCEL();  //加速度
-	accel[0] = T_X;
-	accel[1] = T_Y;
-	accel[2] = T_Z;
-	return accel;
-//	DATA_printf(TX_DATA,T_X);//转换X轴数据到数组
-//	Send_data('A','X');			 //发送X轴数
-//	DATA_printf(TX_DATA,T_Y);//转换Y轴数据到数组
-//	Send_data('A','Y');			 //发送Y轴数
-//	DATA_printf(TX_DATA,T_Z);//转换Z轴数据到数组
-//	Send_data('A','Z');			 //发送Z轴数
-}
-
-short* Gyro(void)
-{
-	READ_MPU9250_GYRO();      //陀螺
-	gyro[0] = T_X;
-	gyro[1] = T_Y;
-	gyro[2] = T_Z;
-	return gyro;
-//	DATA_printf(TX_DATA,T_X);//转换X轴数据到数组
-//	Send_data('G','X');			 //发送X轴数
-//	DATA_printf(TX_DATA,T_Y);//转换Y轴数据到数组
-//	Send_data('G','Y');			 //发送Y轴数
-//	DATA_printf(TX_DATA,T_Z);//转换Z轴数据到数组
-//	Send_data('G','Z');			 //发送Z轴数
-}
-
-short* Mag(void)
-{
-	READ_MPU9250_MAG();	      //磁场
-	mag[0] = T_X;
-	mag[1] = T_Y;
-	mag[2] = T_Z;
-	return mag;
-//	DATA_printf(TX_DATA,T_X);//转换X轴数据到数组
-//	Send_data('M','X');			 //发送X轴数
-//	DATA_printf(TX_DATA,T_Y);//转换Y轴数据到数组
-//	Send_data('M','Y');			 //发送Y轴数
-//	DATA_printf(TX_DATA,T_Z);//转换Z轴数据到数组
-//	Send_data('M','Z');			 //发送Z轴数
-	/*
-}
-	DATA_printf(TX_DATA,T_T);//转换温度数据到数组
-	Send_data('T');			 //发送温度数据
-	*/
-//	USART1_SendData(0X0D);	 //换行
-//	USART1_SendData(0X0A);	 //回车
-//	Delayms(10);				 //延时
-}
-
-
-/*************结束***************/

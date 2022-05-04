@@ -35,3 +35,11 @@
 .\objects\main.o: .\nRF24l01\spi.h
 .\objects\main.o: .\nRF24l01\nRF24l01.h
 .\objects\main.o: .\mpu9250\mpu9250.h
+.\objects\main.o: .\mpu9250\inv_mpu.h
+.\objects\main.o: D:\Installation\Keil u4\ARM\ARMCC\Bin\..\include\math.h
+.\objects\main.o: .\mpu9250\inv_mpu_dmp_motion_driver.h
+.\objects\main.o: .\control\pwm.h
+.\objects\main.o: .\control\motor.h
+.\objects\main.o: .\control\Led.h
+.\objects\main.o: .\mpu9250\stm32_iic.h
+.\objects\main.o: .\control\motion_control.h

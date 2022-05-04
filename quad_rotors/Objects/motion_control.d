@@ -1,0 +1,41 @@
+.\objects\motion_control.o: control\motion_control.c
+.\objects\motion_control.o: .\Start\stm32f10x.h
+.\objects\motion_control.o: .\Start\core_cm3.h
+.\objects\motion_control.o: D:\Installation\Keil u4\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\motion_control.o: .\Start\system_stm32f10x.h
+.\objects\motion_control.o: .\User\stm32f10x_conf.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_adc.h
+.\objects\motion_control.o: .\Start\stm32f10x.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_bkp.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_can.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_cec.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_crc.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_dac.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_dbgmcu.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_dma.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_exti.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_flash.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_fsmc.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_gpio.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_i2c.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_iwdg.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_pwr.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_rcc.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_rtc.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_sdio.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_spi.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_tim.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_usart.h
+.\objects\motion_control.o: .\Libraries\stm32f10x_wwdg.h
+.\objects\motion_control.o: .\Libraries\misc.h
+.\objects\motion_control.o: control\motion_control.h
+.\objects\motion_control.o: .\nRF24l01\delay.h
+.\objects\motion_control.o: .\Serial\sys.h
+.\objects\motion_control.o: control\pwm.h
+.\objects\motion_control.o: .\mpu9250\mpu9250.h
+.\objects\motion_control.o: .\mpu9250\inv_mpu.h
+.\objects\motion_control.o: D:\Installation\Keil u4\ARM\ARMCC\Bin\..\include\math.h
+.\objects\motion_control.o: D:\Installation\Keil u4\ARM\ARMCC\Bin\..\include\stdio.h
+.\objects\motion_control.o: .\mpu9250\inv_mpu_dmp_motion_driver.h
+.\objects\motion_control.o: control\Led.h
+.\objects\motion_control.o: .\nRF24l01\nRF24l01.h
