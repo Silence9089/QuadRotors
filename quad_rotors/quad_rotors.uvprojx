@@ -766,29 +766,14 @@
               <FilePath>.\nRF24l01\delay.c</FilePath>
             </File>
             <File>
-              <FileName>delay.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\nRF24l01\delay.h</FilePath>
-            </File>
-            <File>
               <FileName>nRF24l01.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\nRF24l01\nRF24l01.c</FilePath>
             </File>
             <File>
-              <FileName>nRF24l01.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\nRF24l01\nRF24l01.h</FilePath>
-            </File>
-            <File>
               <FileName>spi.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\nRF24l01\spi.c</FilePath>
-            </File>
-            <File>
-              <FileName>spi.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\nRF24l01\spi.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -809,11 +794,6 @@
               <FileName>Led.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\control\Led.c</FilePath>
-            </File>
-            <File>
-              <FileName>Led.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\control\Led.h</FilePath>
             </File>
             <File>
               <FileName>motion_control.c</FileName>

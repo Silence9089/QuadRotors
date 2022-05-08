@@ -51,15 +51,19 @@ short remote_base;  //基值
 short remote_fb;
 short remote_lr;
 short remote_turn;
-u8 remote_turn_i=0;
 u8 pid_control_i=0;
 u16 expect_i=0;
 
-u8 remote_mode[4];
+u8 remote_mode[4];  //遥控器模式
+
+//滤波器
+#define median_len 51
+short median_filter[median_len];  //中值滤波器，滤掉遥控器的脉冲干扰。取奇数是为了方便取中位数。
+short median_i = 0;
 
 
 void Remote_Resolve(void){  //解算遥控器信号
-	int i;
+	short i;
 	//NRF24L01_RX_Mode();	
 	if(NRF24L01_RxPacket(tmp_buf)==0)//一旦接收到信息,则显示出来.
 	{
@@ -157,19 +161,19 @@ void Pid_Control(void){  //控制姿态
 		err.roll = expect.roll - Roll;
 		err.yaw = expect.yaw - Yaw;
 		
-		err_sum.pitch += err.pitch;
-		err_sum.roll += err.roll;
-		err_sum.yaw += err.yaw;
+		//变速积分上限为10度
+		vs.pitch = 1.0 - 0.1 * err.pitch;
+		vs.roll = 1.0 - 0.1 * err.roll;
+		vs.yaw = 1.0 - 0.1 * err.yaw;
 		
-		//变速积分上限为20度
-		vs.pitch = 1.0 - 0.05 * err.pitch;
-		vs.roll = 1.0 - 0.05 * err.roll;
-		vs.yaw = 1.0 - 0.05 * err.yaw;
+		err_sum.pitch += vs.pitch * err.pitch;
+		err_sum.roll += vs.roll * err.roll;
+		err_sum.yaw += vs.yaw * err.yaw;
 		
 		//这里可以考虑加一个消除积分不灵敏区
-		uk.pitch = kp * err.pitch + vs.pitch * ki * err_sum.pitch;
-		uk.roll = kp * err.roll + vs.roll * ki * err_sum.roll;
-		uk.yaw = kp * err.yaw + vs.yaw * ki * err_sum.yaw;
+		uk.pitch = kp * err.pitch + ki * err_sum.pitch;
+		uk.roll = kp * err.roll + ki * err_sum.roll;
+		uk.yaw = kp * err.yaw + ki * err_sum.yaw;
 		
 		offset_f = uk.pitch + uk.yaw;
 		offset_b = -uk.pitch + uk.yaw;
@@ -200,16 +204,28 @@ void Pid_Control(void){  //控制姿态
 	}		
 }
 
+short Median(short arr[]){  //对数组排序并输出中位数
+	short i, j, tmp;
+	for(i = 0;i < median_len - 1; i++)  //冒泡排序
+		for(j = 0; j < median_len - 1 - i; j++)
+			if(arr[j] > arr[j + 1]){
+				tmp = arr[j];
+				arr[j] = arr[j + 1];
+				arr[j + 1] = tmp;
+			}
+	return arr[median_len / 2];
+}
+
 void Expect_Update(void){
 	Remote_Resolve();  //更新遥控器信号
-	
-	expect.pitch = init.pitch + 20.0 * remote_fb / 500;
-	expect.roll = init.roll + 20.0 * remote_lr / 500;
-	remote_turn_i++;
-	if(remote_turn_i==100){
-		expect.yaw += 1.0 * remote_turn / 500;
-		remote_turn_i=0;
+	median_filter[median_i] = Yaw;
+	median_i += 1;
+	if(median_i >= median_len){
+		expect.yaw = Median(median_filter);  //中值滤波
+		median_i = 0;
 	}
+	expect.pitch = init.pitch + 10.0 * remote_fb / 500;
+	expect.roll = init.roll + 10.0 * remote_lr / 500;
 }
 
 short Limit_Amplitude(short duty_cycle){  //对占空比限幅
@@ -243,12 +259,23 @@ void Motor_R(short duty_cycle){
 void Move(void){  //运动控制
 	Expect_Update();  //更新期望姿态
 	Pid_Control();  //更新陀螺仪信息并PID控制平衡
-	if(remote_mode[1] == '2'){
+	
+	if(remote_mode[1] == '2'){  //紧急停止
 		remote_base = 500;
 		offset_f = 0;
 		offset_b = 0;
 		offset_l = 0;
 		offset_r = 0;
+		
+		//清除误差累计
+		err_sum.pitch = 0;
+		err_sum.roll = 0;
+		err_sum.yaw = 0;
+		
+		//令期望等于当前的角度，等放平稳之后再飞
+		expect.pitch = Pitch;
+		expect.roll = Roll;
+		expect.yaw = Yaw;
 	}
 		
 	Motor_F(remote_base + offset_f);
