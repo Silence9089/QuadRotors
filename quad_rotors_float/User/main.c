@@ -47,6 +47,15 @@
 	Mpu_Init(1);
 	//motor_Init();
 	TIM_PWM_Init(9999,143);//不分频。PWM频率=72000/(9999+1)/(143+1)=50Hz
+	 
+		while(NRF24L01_Check())	
+	{
+		printf("NRF24L01 Error\r\n");
+		delay_ms(200);
+	}								   
+	printf("NRF24L01 OK\r\n");
+	NRF24L01_RX_Mode();
+	
 	Motion_Init();
 	 
 	Led_Off();
@@ -61,12 +70,7 @@
 	 
 		/*检查NRF24L01是否在位，如果没连nrf的话就注掉，
 			不然会一直在检测的循环里出不去*/	
-	//while(NRF24L01_Check())	
-	//{
-	//	printf("NRF24L01 Error\r\n");
-	//	delay_ms(200);
-	//}								   
-	//printf("NRF24L01 OK\r\n");
+
 		
 	//**************************************************************
 	
@@ -74,7 +78,7 @@
 		/*tips: 在usart.c中重定义printf，
 		现在使用printf是将内容通过串口发送出去，方便调试。
 		但发送的内容为字符串，建议使用u8型（即tmp_buf的那个类型）。*/
-//		NRF24L01_RX_Mode();
+		
  	while(1){
 		
 		//nrf的接收模式，使用的话需要将下方的发送模式注释掉

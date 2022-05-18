@@ -8,9 +8,9 @@
 #include <math.h>
 
 //位置式pid控制的一些参数
-float kp = 2;
-float ki = 0.0005;
-float kd = 0;
+float kp = 20;
+float ki = 0;
+float kd = 10;
 
 typedef struct{
 	float pitch;
@@ -21,6 +21,7 @@ typedef struct{
 
 Euler err;  //偏差信号
 Euler err_sum;
+Euler err_pre;  //上一时刻的偏差信号
 Euler init;  //上电时的欧拉角（也即飞机水平时的欧拉角）
 Euler expect;  //期望的欧拉角
 Euler vs;  //变速积分系数
@@ -41,7 +42,7 @@ short remote_turn;
 u8 remote_mode[4];
 
 //滤波器
-#define median_len 51
+#define median_len 71
 float median_filter[median_len];  //中值滤波器，滤掉遥控器的脉冲干扰。取奇数是为了方便取中位数。
 u8 median_i = 0;
 #define mean_len 50
@@ -82,7 +83,7 @@ void Remote_Resolve(void){  //解算遥控器信号
 	}
 }
 
-void Motion_Init(void){ //先尝试仅用比例积分控制
+void Motion_Init(void){ //用比例微分控制
 	u8 i;
 	
 	Led_On();
@@ -90,15 +91,23 @@ void Motion_Init(void){ //先尝试仅用比例积分控制
 	uk.pitch = 0;
   uk.roll = 0;
 	uk.yaw = 0;
+	
 	err.pitch = 0;
 	err.roll = 0;
 	err.yaw = 0;
-	err_sum.pitch = 0;  
-	err_sum.roll = 0;
-  err_sum.yaw = 0;
+	
+//	err_sum.pitch = 0;  
+//	err_sum.roll = 0;
+//  err_sum.yaw = 0;
+	
+	err_pre.pitch = 0;
+	err_pre.roll = 0;
+	err_pre.yaw = 0;
+	
 	vs.pitch = 0;
 	vs.roll = 0;
 	vs.yaw = 0;
+	
 	offset_f = 0;  //偏移
   offset_b = 0;
   offset_l = 0; 
@@ -106,10 +115,31 @@ void Motion_Init(void){ //先尝试仅用比例积分控制
 	
 //	NRF24L01_RX_Mode();
 	
-	for(i = 0; i < 50; i++){  
+	//油门解锁
+	//********************************************
+	Remote_Resolve();
+	while(remote_base >= 995){  //发送10%占空比
+		Remote_Resolve();
+	}
+	TIM_SetCompare1(TIM2,(int)(10000 - 1000));
+	TIM_SetCompare2(TIM2,(int)(10000 - 1000));
+	TIM_SetCompare3(TIM2,(int)(10000 - 1000));
+	TIM_SetCompare4(TIM2,(int)(10000 - 1000));
+	
+	while(remote_base <= 505){  //发送5%占空比
+		Remote_Resolve();
+	}
+	TIM_SetCompare1(TIM2,(int)(10000 - 500));
+	TIM_SetCompare2(TIM2,(int)(10000 - 500));
+	TIM_SetCompare3(TIM2,(int)(10000 - 500));
+	TIM_SetCompare4(TIM2,(int)(10000 - 500));
+	
+	//********************************************
+	
+	for(i = 0; i < 70; i++){  
 		Update_attitude_Angle();
 	}
-	for(i = 0; i < 50; i++){  //取50次数据的平均作为飞机初始姿态数据
+	for(i = 0; i < mean_len; i++){  //取多次平均作为飞机初始姿态数据
 		Update_attitude_Angle();
 		init.pitch += Pitch;
 		init.roll += Roll;
@@ -132,9 +162,11 @@ void Motion_Init(void){ //先尝试仅用比例积分控制
 
 float Update_Vs(float err_angle){  //更新变速积分系数
 	float variable_speed;
+	float lower_angle = 1;
 	float upper_angle = 10;
+	
 	err_angle = fabs(err_angle);
-	if(err_angle > upper_angle)
+	if(err_angle > upper_angle || err_angle < lower_angle)
 		variable_speed = 0;
 	else
 		variable_speed = 1.0 - err_angle / upper_angle;
@@ -162,44 +194,48 @@ float Mean_Filter(float* arr, float new_angle){  //滑动窗口均值滤波
 void Pid_Control(void){  //控制姿态
 	Update_attitude_Angle();  //读取欧拉角
 	
-	Pitch = Mean_Filter(mean_filter_pitch, Pitch);
-	Roll = Mean_Filter(mean_filter_roll, Roll);
-	Yaw = Mean_Filter(mean_filter_yaw, Yaw);
+//	Pitch = Mean_Filter(mean_filter_pitch, Pitch);
+//	Roll = Mean_Filter(mean_filter_roll, Roll);
+//	Yaw = Mean_Filter(mean_filter_yaw, Yaw);
 	
 	if(expect.yaw - Yaw > 280)
 		expect.yaw -= 360;
 	else if(expect.yaw - Yaw < -280)
 		expect.yaw += 360;
 	
+	err_pre.pitch = err.pitch;
+	err_pre.roll = err.roll;
+	err_pre.yaw = err.yaw;
+	
 	err.pitch = expect.pitch - Pitch;
 	err.roll = expect.roll - Roll;
 	err.yaw = expect.yaw - Yaw;
 		
 	//更新变速积分系数
-	vs.pitch = Update_Vs(err.pitch);
-	vs.roll = Update_Vs(err.roll);
-	vs.yaw = Update_Vs(err.yaw);
+//	vs.pitch = Update_Vs(err.pitch);
+//	vs.roll = Update_Vs(err.roll);
+//	vs.yaw = Update_Vs(err.yaw);
 	
-	err_sum.pitch += vs.pitch * err.pitch;
-	err_sum.roll += vs.roll * err.roll;
-	err_sum.yaw += vs.yaw * err.yaw;
+	//误差累计
+//	err_sum.pitch += vs.pitch * err.pitch;
+//	err_sum.roll += vs.roll * err.roll;
+//	err_sum.yaw += vs.yaw * err.yaw;
 
 	
-	//这里可以考虑加一个消除积分不灵敏区
-	uk.pitch = kp * err.pitch + ki * err_sum.pitch;
-	uk.roll = kp * err.roll + ki * err_sum.roll;
-	uk.yaw = kp * err.yaw + ki * err_sum.yaw;
+	uk.pitch = kp * err.pitch + kd * (err.pitch - err_pre.pitch);
+	uk.roll = kp * err.roll + kd * (err.roll - err_pre.roll);
+	uk.yaw = kp * err.yaw + kd * (err.yaw - err_pre.yaw);
 	
-	offset_f = uk.pitch + uk.yaw;
-	offset_b = -uk.pitch + uk.yaw;
-	offset_l = uk.roll - uk.yaw;
-	offset_r = -uk.roll - uk.yaw;	
+	offset_f = -uk.pitch - uk.yaw;
+	offset_b = uk.pitch - uk.yaw;
+	offset_l = -uk.roll + uk.yaw;
+	offset_r = uk.roll + uk.yaw;	
 	
 	//对offset限幅
-	offset_f = Limit_Offset(offset_f);
-	offset_b = Limit_Offset(offset_b);
-	offset_l = Limit_Offset(offset_l);
-	offset_r = Limit_Offset(offset_r);
+//	offset_f = Limit_Offset(offset_f);
+//	offset_b = Limit_Offset(offset_b);
+//	offset_l = Limit_Offset(offset_l);
+//	offset_r = Limit_Offset(offset_r);
 }
 
 short Median(float arr[]){  //对数组排序并输出中位数
@@ -216,7 +252,7 @@ short Median(float arr[]){  //对数组排序并输出中位数
 
 void Expect_Update(void){
 	Remote_Resolve();  //更新遥控器信号
-	median_filter[median_i] = Yaw;
+	median_filter[median_i] += remote_turn / 100;
 	median_i += 1;
 	if(median_i >= median_len){
 		expect.yaw = Median(median_filter);  //中值滤波
@@ -236,22 +272,22 @@ short Limit_Amplitude(short duty_cycle){  //对占空比限幅
 
 void Motor_F(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare1(TIM2,(int)(10000 - duty_cycle));
+	TIM_SetCompare1(TIM2,(int)(10000 - 10*duty_cycle));
 }
 
 void Motor_B(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare2(TIM2,(int)(10000 - duty_cycle));
+	TIM_SetCompare2(TIM2,(int)(10000 - 10*duty_cycle));
 }
 
 void Motor_L(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare3(TIM2,(int)(10000 - duty_cycle));
+	TIM_SetCompare3(TIM2,(int)(10000 - 10*duty_cycle));
 }
 
 void Motor_R(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare4(TIM2,(int)(10000 - duty_cycle));
+	TIM_SetCompare4(TIM2,(int)(10000 - 10*duty_cycle));
 }
 
 void Move(void){  //运动控制
@@ -265,11 +301,12 @@ void Move(void){  //运动控制
 		offset_l = 0;
 		offset_r = 0;
 		
-		Motion_Init();
 	}
-		
+	
+	//结束前一定记得把这四个函数给改回去啊！！！
 	Motor_F(remote_base + offset_f);
 	Motor_B(remote_base + offset_b);
 	Motor_L(remote_base + offset_l);
 	Motor_R(remote_base + offset_r);
+
 }
