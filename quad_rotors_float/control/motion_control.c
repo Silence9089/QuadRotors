@@ -347,7 +347,8 @@ void Motor_R(short duty_cycle){
 
 void Move(void){  //运动控制
 	ExpectAngleUpdate();  //更新期望姿态
-	Pid_Control();  //更新陀螺仪信息并PID控制平衡
+	AngleControl();  //更新陀螺仪信息并PID控制平衡
+	GyroControl();
 	
 	if(remote_mode[1] == '2'){  //紧急停止（右手短按），且重新初始化
 		remote_base = 300;

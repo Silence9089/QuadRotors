@@ -27,36 +27,16 @@ Project File Date:  05/02/2022
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 5 (build 528)', folder: 'D:\Installation\Keil u4\ARM\ARMCC\Bin'
 Build target 'Target 1'
-compiling mpu9250.c...
-mpu9250\stm32_iic.h(44): warning:  #47-D: incompatible redefinition of macro "I2C_Direction_Transmitter"  (declared at line 124 of ".\Libraries\stm32f10x_i2c.h")
-  #define	I2C_Direction_Transmitter   0
-mpu9250\stm32_iic.h(46): warning:  #47-D: incompatible redefinition of macro "I2C_Direction_Receiver"  (declared at line 125 of ".\Libraries\stm32f10x_i2c.h")
-  #define	I2C_Direction_Receiver      1	 
-mpu9250\mpu9250.c: 2 warnings, 0 errors
-compiling main.c...
-.\mpu9250\mpu9250.h(43): warning:  #47-D: incompatible redefinition of macro "CONFIG"  (declared at line 16 of ".\nRF24l01\nRF24l01.h")
-  #define	CONFIG				0x1A	//0x06	低通滤波频率，典型值：0x06(5Hz)
-.\mpu9250\stm32_iic.h(44): warning:  #47-D: incompatible redefinition of macro "I2C_Direction_Transmitter"  (declared at line 124 of ".\Libraries\stm32f10x_i2c.h")
-  #define	I2C_Direction_Transmitter   0
-.\mpu9250\stm32_iic.h(46): warning:  #47-D: incompatible redefinition of macro "I2C_Direction_Receiver"  (declared at line 125 of ".\Libraries\stm32f10x_i2c.h")
-  #define	I2C_Direction_Receiver      1	 
-User\main.c(39): warning:  #223-D: function "Led_Init" declared implicitly
-  	Led_Init();
-User\main.c(40): warning:  #223-D: function "Led_On" declared implicitly
-  	Led_On();
-User\main.c(61): warning:  #223-D: function "Led_Off" declared implicitly
-  	Led_Off();
-User\main.c(37): warning:  #177-D: variable "tmp_buf"  was declared but never referenced
-  	u8 tmp_buf[33];  //nrf发送和接收的信息都在这个数组里
-User\main.c: 7 warnings, 0 errors
 compiling motion_control.c...
 .\nRF24l01\nRF24l01.h(16): warning:  #47-D: incompatible redefinition of macro "CONFIG"  (declared at line 43 of ".\mpu9250\mpu9250.h")
   #define CONFIG          0x00  //配置寄存器地址;bit0:1接收模式,0发射模式;bit1:电选择;bit2:CRC模式;bit3:CRC使能;
-control\motion_control.c: 1 warning, 0 errors
+control\motion_control.c(367): warning:  #1-D: last line of file ends without a newline
+  }
+control\motion_control.c: 2 warnings, 0 errors
 linking...
-Program Size: Code=21776 RO-data=3744 RW-data=224 ZI-data=2320  
+Program Size: Code=22112 RO-data=3744 RW-data=212 ZI-data=2428  
 FromELF: creating hex file...
-".\Objects\quad_rotors.axf" - 0 Error(s), 10 Warning(s).
+".\Objects\quad_rotors.axf" - 0 Error(s), 2 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -70,7 +50,7 @@ Package Vendor: Keil
   D:\Installation\Keil u4\ARM\PACK\Keil\STM32F1xx_DFP\2.2.0\Device\Include
 
 <h2>Collection of Component Files used:</h2>
-Build Time Elapsed:  00:00:02
+Build Time Elapsed:  00:00:01
 </pre>
 </body>
 </html>
