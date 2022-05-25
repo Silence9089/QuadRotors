@@ -9,8 +9,8 @@ short T_X,T_Y,T_Z;		 //X,Y,Z轴，温度
  
 //声明相关变量
 unsigned long sensor_timestamp;
-short gyro[3], accel[3], sensors;
 unsigned char more;
+short gyro[3], accel[3], sensors;
 long quat[4];
 //误差纠正
 #define  Pitch_error  1.0

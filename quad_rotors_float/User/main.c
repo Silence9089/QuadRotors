@@ -35,18 +35,18 @@
 	 //所有的初始化
 	 //**************************************************************
 	u8 tmp_buf[33];  //nrf发送和接收的信息都在这个数组里
+
 	Led_Init();
 	Led_On();
-	 
 	delay_init();	    	 //延时函数初始化	
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);// 设置中断优先级分组2
 	uart_init(9600);	 	//串口初始化为9600
  	NRF24L01_Init();    	//初始化NRF24L01  
 	i2cInit();      //IIC总线的初始化
+	TIM_PWM_Init(9999,143);//不分频。PWM频率=72000/(9999+1)/(143+1)=50Hz
 	delay_ms(10);
 	Mpu_Init(1);
 	//motor_Init();
-	TIM_PWM_Init(9999,143);//不分频。PWM频率=72000/(9999+1)/(143+1)=50Hz
 	 
 		while(NRF24L01_Check())	
 	{

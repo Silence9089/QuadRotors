@@ -7,10 +7,6 @@
 #include "nRF24l01.h"
 #include <math.h>
 
-//位置式pid控制的一些参数
-float kp = 20;
-float ki = 0;
-float kd = 10;
 
 typedef struct{
 	float pitch;
@@ -18,14 +14,24 @@ typedef struct{
 	float yaw;
 }Euler;
 
+typedef struct{
+	float kp;
+	float ki;
+	float kd;
+	Euler err;  //偏差信号
+	Euler err_sum;  //偏差信号的累积
+	Euler err_pre;  //上一时刻的偏差信号
+	Euler expect;  //期望值
+	Euler expect_pre;  //上一刻的期望（用于避免因干扰带来的数据突变，见ExpectAngleUpdate函数）
+	Euler vs;  //变速积分系数
+	Euler out;  //输出
+}Pid;
 
-Euler err;  //偏差信号
-Euler err_sum;
-Euler err_pre;  //上一时刻的偏差信号
-Euler init;  //上电时的欧拉角（也即飞机水平时的欧拉角）
-Euler expect;  //期望的欧拉角
-Euler vs;  //变速积分系数
-Euler uk;  //控制信号
+//角度（外环）和角速度（内环）
+Pid Angle;
+Pid Gyro;
+Euler init;
+
 
 //被控对象
 short offset_f;  //偏移
@@ -88,25 +94,48 @@ void Motion_Init(void){ //用比例微分控制
 	
 	Led_On();
 	
-	uk.pitch = 0;
-  uk.roll = 0;
-	uk.yaw = 0;
+	//PID参数在这里修改，当前的参数是参考开源飞控
+	Angle.kp = 2.5;
+	Angle.ki = 0;
+	Angle.kd = 0;
+	Gyro.kp = 0.6;
+	Gyro.ki = 0;
+	Gyro.kd = 0.01;
+
+	Angle.expect.pitch = 0;
+	Angle.expect.roll = 0;
+	Angle.expect.yaw = 0;
+	Gyro.expect.pitch = 0;
+	Gyro.expect.roll = 0;
+	Gyro.expect.yaw = 0;
 	
-	err.pitch = 0;
-	err.roll = 0;
-	err.yaw = 0;
+	Angle.expect_pre.pitch = 0;
+	Angle.expect_pre.roll = 0;
+	Angle.expect_pre.yaw = 0;
+	Gyro.expect_pre.pitch = 0;
+	Gyro.expect_pre.roll = 0;
+	Gyro.expect_pre.yaw = 0;	
 	
-//	err_sum.pitch = 0;  
-//	err_sum.roll = 0;
-//  err_sum.yaw = 0;
+	Angle.err.pitch = 0;
+	Angle.err.roll = 0;
+	Angle.err.yaw = 0;
+	Gyro.err.pitch = 0;
+	Gyro.err.roll = 0;
+	Gyro.err.yaw = 0;
 	
-	err_pre.pitch = 0;
-	err_pre.roll = 0;
-	err_pre.yaw = 0;
+	Angle.err_pre.pitch = 0;
+	Angle.err_pre.roll = 0;
+	Angle.err_pre.yaw = 0;
+	Gyro.err_pre.pitch = 0;
+	Gyro.err_pre.roll = 0;
+	Gyro.err_pre.yaw = 0;
 	
-	vs.pitch = 0;
-	vs.roll = 0;
-	vs.yaw = 0;
+	Angle.err_sum.pitch = 0;  
+	Angle.err_sum.roll = 0;
+  Angle.err_sum.yaw = 0;
+	Gyro.err_sum.pitch = 0;  
+	Gyro.err_sum.roll = 0;
+  Gyro.err_sum.yaw = 0;
 	
 	offset_f = 0;  //偏移
   offset_b = 0;
@@ -118,58 +147,60 @@ void Motion_Init(void){ //用比例微分控制
 	//油门解锁
 	//********************************************
 	Remote_Resolve();
-	while(remote_base >= 995){  //发送10%占空比
-		Remote_Resolve();
+	while(remote_base <= 995){  //发送10%占空比
+		Remote_Resolve();	
 	}
-	TIM_SetCompare1(TIM2,(int)(10000 - 1000));
-	TIM_SetCompare2(TIM2,(int)(10000 - 1000));
-	TIM_SetCompare3(TIM2,(int)(10000 - 1000));
-	TIM_SetCompare4(TIM2,(int)(10000 - 1000));
+	TIM_SetCompare1(TIM2,(int)( 1000));
+	TIM_SetCompare2(TIM2,(int)( 1000));
+	TIM_SetCompare3(TIM2,(int)( 1000));
+	TIM_SetCompare4(TIM2,(int)( 1000));
 	
-	while(remote_base <= 505){  //发送5%占空比
+	while(remote_base >= 505){  //发送5%占空比
 		Remote_Resolve();
 	}
-	TIM_SetCompare1(TIM2,(int)(10000 - 500));
-	TIM_SetCompare2(TIM2,(int)(10000 - 500));
-	TIM_SetCompare3(TIM2,(int)(10000 - 500));
-	TIM_SetCompare4(TIM2,(int)(10000 - 500));
+	TIM_SetCompare1(TIM2,(int)( 500));
+	TIM_SetCompare2(TIM2,(int)( 500));
+	TIM_SetCompare3(TIM2,(int)( 500));
+	TIM_SetCompare4(TIM2,(int)( 500));
 	
 	//********************************************
 	
 	for(i = 0; i < 70; i++){  
 		Update_attitude_Angle();
 	}
-	for(i = 0; i < mean_len; i++){  //取多次平均作为飞机初始姿态数据
+	for(i = 0; i < 50; i++){  //取多次平均作为飞机初始姿态数据
 		Update_attitude_Angle();
 		init.pitch += Pitch;
 		init.roll += Roll;
 		init.yaw += Yaw;
-		mean_filter_pitch[i] = Pitch;
-		mean_filter_roll[i] = Roll;
-		mean_filter_yaw[i] = Yaw;
+//		mean_filter_pitch[i] = Pitch;
+//		mean_filter_roll[i] = Roll;
+//		mean_filter_yaw[i] = Yaw;
 	}
 	
 	init.pitch /= 50;
 	init.roll /= 50;
 	init.yaw /= 50;
 	
-	expect.pitch = init.pitch;
-	expect.roll = init.roll;
-	expect.yaw = init.yaw;
+	Angle.expect.pitch = init.pitch;
+	Angle.expect.roll = init.roll;
+	Angle.expect.yaw = init.yaw;
+	Angle.expect_pre.pitch = init.pitch;
+	Angle.expect_pre.roll = init.roll;
+	Angle.expect_pre.yaw = init.yaw;
+	
 	
 	Led_Off();
 }
 
-float Update_Vs(float err_angle){  //更新变速积分系数
+float Update_Vs(float err, float lower, float upper){  //更新变速积分系数
 	float variable_speed;
-	float lower_angle = 1;
-	float upper_angle = 10;
 	
-	err_angle = fabs(err_angle);
-	if(err_angle > upper_angle || err_angle < lower_angle)
+	err = fabs(err);
+	if(err > upper || err < lower)
 		variable_speed = 0;
 	else
-		variable_speed = 1.0 - err_angle / upper_angle;
+		variable_speed = 1.0 - err / upper;
 	return variable_speed;
 }
 
@@ -191,25 +222,23 @@ float Mean_Filter(float* arr, float new_angle){  //滑动窗口均值滤波
 	return mean;
 }
 
-void Pid_Control(void){  //控制姿态
+void AngleControl(void){  //控制姿态
 	Update_attitude_Angle();  //读取欧拉角
 	
 //	Pitch = Mean_Filter(mean_filter_pitch, Pitch);
 //	Roll = Mean_Filter(mean_filter_roll, Roll);
 //	Yaw = Mean_Filter(mean_filter_yaw, Yaw);
 	
-	if(expect.yaw - Yaw > 280)
-		expect.yaw -= 360;
-	else if(expect.yaw - Yaw < -280)
-		expect.yaw += 360;
+	if(Angle.expect.yaw - Yaw > 330)
+		Angle.expect.yaw -= 360;
+	else if(Angle.expect.yaw - Yaw < -330)
+		Angle.expect.yaw += 360;
 	
-	err_pre.pitch = err.pitch;
-	err_pre.roll = err.roll;
-	err_pre.yaw = err.yaw;
+	Angle.err_pre = Angle.err;
 	
-	err.pitch = expect.pitch - Pitch;
-	err.roll = expect.roll - Roll;
-	err.yaw = expect.yaw - Yaw;
+	Angle.err.pitch = Angle.expect.pitch - Pitch;
+	Angle.err.roll = Angle.expect.roll - Roll;
+	Angle.err.yaw = Angle.expect.yaw - Yaw;
 		
 	//更新变速积分系数
 //	vs.pitch = Update_Vs(err.pitch);
@@ -222,20 +251,36 @@ void Pid_Control(void){  //控制姿态
 //	err_sum.yaw += vs.yaw * err.yaw;
 
 	
-	uk.pitch = kp * err.pitch + kd * (err.pitch - err_pre.pitch);
-	uk.roll = kp * err.roll + kd * (err.roll - err_pre.roll);
-	uk.yaw = kp * err.yaw + kd * (err.yaw - err_pre.yaw);
+	Angle.out.pitch = Angle.kp * Angle.err.pitch + Angle.kd * (Angle.err.pitch - Angle.err_pre.pitch);
+	Angle.out.roll = Angle.kp * Angle.err.roll + Angle.kd * (Angle.err.roll - Angle.err_pre.roll);
+	Angle.out.yaw = Angle.kp * Angle.err.yaw + Angle.kd * (Angle.err.yaw - Angle.err_pre.yaw);
 	
-	offset_f = -uk.pitch - uk.yaw;
-	offset_b = uk.pitch - uk.yaw;
-	offset_l = -uk.roll + uk.yaw;
-	offset_r = uk.roll + uk.yaw;	
+}
+
+void GyroControl(){
 	
-	//对offset限幅
-//	offset_f = Limit_Offset(offset_f);
-//	offset_b = Limit_Offset(offset_b);
-//	offset_l = Limit_Offset(offset_l);
-//	offset_r = Limit_Offset(offset_r);
+	Gyro.err_pre = Gyro.err;
+	
+	//这里gyro索引的顺序待定
+	Gyro.err.pitch = Gyro.expect.pitch - gyro[0];
+	Gyro.err.roll = Gyro.expect.roll - gyro[1];
+	Gyro.err.yaw = Gyro.expect.yaw - gyro[2];
+	
+	
+	//误差累计
+//	err_sum.pitch += vs.pitch * err.pitch;
+//	err_sum.roll += vs.roll * err.roll;
+//	err_sum.yaw += vs.yaw * err.yaw;
+
+	
+	Gyro.out.pitch = Gyro.kp * Gyro.err.pitch + Gyro.kd * (Gyro.err.pitch - Gyro.err_pre.pitch);
+	Gyro.out.roll = Gyro.kp * Gyro.err.roll + Gyro.kd * (Gyro.err.roll - Gyro.err_pre.roll);
+	Gyro.out.yaw = Gyro.kp * Gyro.err.yaw + Gyro.kd * (Gyro.err.yaw - Gyro.err_pre.yaw);
+	
+	offset_f = -Gyro.out.pitch - Gyro.out.yaw;
+	offset_b = Gyro.out.pitch - Gyro.out.yaw;
+	offset_l = -Gyro.out.roll + Gyro.out.yaw;
+	offset_r = Gyro.out.roll + Gyro.out.yaw;	
 }
 
 short Median(float arr[]){  //对数组排序并输出中位数
@@ -250,16 +295,26 @@ short Median(float arr[]){  //对数组排序并输出中位数
 	return arr[median_len / 2];
 }
 
-void Expect_Update(void){
+void ExpectAngleUpdate(void){
 	Remote_Resolve();  //更新遥控器信号
 	median_filter[median_i] += remote_turn / 100;
 	median_i += 1;
 	if(median_i >= median_len){
-		expect.yaw = Median(median_filter);  //中值滤波
+		Angle.expect.yaw = Median(median_filter);  //中值滤波
+		if (fabs(Angle.expect.yaw - Angle.expect_pre.yaw) > 15)
+			Angle.expect.yaw = Angle.expect_pre.yaw;
+		Angle.expect_pre.yaw = Angle.expect.yaw;
 		median_i = 0;
 	}
-	expect.pitch = init.pitch + 10.0 * remote_fb / 500;
-	expect.roll = init.roll + 10.0 * remote_lr / 500;
+	Angle.expect.pitch = init.pitch + 10.0 * remote_fb / 500;
+	if (fabs(Angle.expect.pitch - Angle.expect_pre.pitch) > 10)
+			Angle.expect.pitch = Angle.expect_pre.pitch;
+		Angle.expect_pre.pitch = Angle.expect.pitch;
+	
+	Angle.expect.roll = init.roll + 10.0 * remote_lr / 500;
+	if (fabs(Angle.expect.roll- Angle.expect_pre.roll) > 10)
+			Angle.expect.roll = Angle.expect_pre.roll;
+		Angle.expect_pre.roll = Angle.expect.roll;
 }
 
 short Limit_Amplitude(short duty_cycle){  //对占空比限幅
@@ -272,30 +327,30 @@ short Limit_Amplitude(short duty_cycle){  //对占空比限幅
 
 void Motor_F(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare1(TIM2,(int)(10000 - 10*duty_cycle));
+	TIM_SetCompare1(TIM2,(int)( duty_cycle));
 }
 
 void Motor_B(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare2(TIM2,(int)(10000 - 10*duty_cycle));
+	TIM_SetCompare2(TIM2,(int)( duty_cycle));
 }
 
 void Motor_L(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare3(TIM2,(int)(10000 - 10*duty_cycle));
+	TIM_SetCompare3(TIM2,(int)( duty_cycle));
 }
 
 void Motor_R(short duty_cycle){
 	duty_cycle = Limit_Amplitude(duty_cycle);
-	TIM_SetCompare4(TIM2,(int)(10000 - 10*duty_cycle));
+	TIM_SetCompare4(TIM2,(int)( duty_cycle));
 }
 
 void Move(void){  //运动控制
-	Expect_Update();  //更新期望姿态
+	ExpectAngleUpdate();  //更新期望姿态
 	Pid_Control();  //更新陀螺仪信息并PID控制平衡
 	
 	if(remote_mode[1] == '2'){  //紧急停止（右手短按），且重新初始化
-		remote_base = 500;
+		remote_base = 300;
 		offset_f = 0;
 		offset_b = 0;
 		offset_l = 0;
@@ -303,10 +358,9 @@ void Move(void){  //运动控制
 		
 	}
 	
-	//结束前一定记得把这四个函数给改回去啊！！！
 	Motor_F(remote_base + offset_f);
 	Motor_B(remote_base + offset_b);
 	Motor_L(remote_base + offset_l);
-	Motor_R(remote_base + offset_r);
+	Motor_R(remote_base + offset_r); 
 
 }

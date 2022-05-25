@@ -13,8 +13,8 @@
 
 
 extern float Pitch,Roll,Yaw;						//attitude angle
+extern short gyro[3], accel[3], sensors;
 extern int16_t Direction;								// Compass Direction
-
 
 
 /*Initialize MPU and DMP
